@@ -46,11 +46,17 @@ npm run preview
 
 ## Publicarla
 
-Es una web estática: vale cualquier hosting de páginas estáticas. Ya están preparados Vercel (`vercel.json`) y Netlify (`public/_redirects`).
+Es una web estática y las direcciones internas van con `#` (`…/#/diario`), así que funciona en cualquier hosting sin configurar redirecciones.
 
-1. Sube este proyecto a un repositorio de GitHub.
-2. En Vercel o Netlify, importa el repositorio. Comando de compilación: `npm run build`. Carpeta: `dist`.
-3. Comparte el enlace con los alumnos. Al abrirlo en el móvil podrán instalarla.
+**GitHub Pages (gratis, ya preparado):**
+
+1. Sube este proyecto a un repositorio público de GitHub.
+2. En el repositorio: Settings → Pages → Source: «GitHub Actions».
+3. Cada vez que se sube un cambio a `main`, el flujo `.github/workflows/deploy.yml` compila y publica la app en `https://<usuario>.github.io/<repositorio>/`.
+
+**Vercel o Netlify (sirve también con repositorio privado):** importa el repositorio. Comando de compilación: `npm run build`. Carpeta: `dist`.
+
+Comparte el enlace con los alumnos. Al abrirlo en el móvil podrán instalarla.
 
 ## Próximos pasos
 

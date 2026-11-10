@@ -1,6 +1,7 @@
 import { StrictMode } from 'react';
 import { createRoot } from 'react-dom/client';
-import { BrowserRouter } from 'react-router-dom';
+// Rutas con # (…/#/diario): funcionan en cualquier hosting estático y sin conexión
+import { HashRouter } from 'react-router-dom';
 import '@fontsource/geist-sans/latin-400.css';
 import '@fontsource/geist-sans/latin-500.css';
 import '@fontsource/geist-sans/latin-600.css';
@@ -15,12 +16,12 @@ import { AppStateProvider } from './state/AppState';
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
-    <BrowserRouter>
+    <HashRouter>
       <AppStateProvider>
         <ToastProvider>
           <App />
         </ToastProvider>
       </AppStateProvider>
-    </BrowserRouter>
+    </HashRouter>
   </StrictMode>
 );
