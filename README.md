@@ -60,9 +60,28 @@ Es una web estática y las direcciones internas van con `#` (`…/#/diario`), as
 
 Comparte el enlace con los alumnos. Al abrirlo en el móvil podrán instalarla.
 
+## Cuentas de alumno (Supabase)
+
+Con `VITE_ACCOUNTS=on` en `.env`, la app usa cuentas reales:
+
+- El alumno escribe su email y recibe un **código de 6 cifras** (sin contraseñas).
+- **Solo entran los emails que autoriza el mentor** desde **Perfil → Panel del mentor** (el mismo email que usan en Whop). Si el mentor desactiva o quita un email, ese alumno pierde el acceso.
+- El diario, los tests, los apuntes y el plan se guardan en la cuenta: si cambia de teléfono, recupera todo. Sin conexión sigue funcionando y sincroniza al volver.
+
+La base de datos está descrita en `supabase/schema.sql` (tablas, permisos por alumno y la regla que impide crear cuentas con emails no autorizados). Para dar rol de mentor a alguien:
+
+```sql
+insert into allowed_emails (email, role) values ('mentor@ejemplo.com', 'mentor')
+on conflict (email) do update set role = 'mentor', active = true;
+```
+
+**Antes de activarlo para los alumnos** hay que conectar un servicio de envío de correos propio (por ejemplo Resend) en Supabase → Authentication → SMTP: el correo que trae Supabase de serie solo envía a los miembros del equipo de Supabase y no permite poner el código en el mensaje.
+
+Con `VITE_ACCOUNTS=off` (como está ahora la versión publicada) la app funciona sin cuentas y guarda los datos solo en el teléfono.
+
 ## Próximos pasos
 
-1. **Servidor (Supabase):** cuentas de alumno con código de acceso y datos guardados en la nube, así no se pierden al cambiar de teléfono.
+1. **Envío de correos** (Resend + dominio) y activar las cuentas en la versión publicada.
 2. **Panel del mentor:** subir cada día las preguntas y extractos del directo sin tocar código.
 3. **Notificaciones push:** aviso de test nuevo y recordatorio del diario.
 4. **Capturas del gráfico** en cada operación.

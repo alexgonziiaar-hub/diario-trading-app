@@ -1,5 +1,7 @@
 import { useState, type FormEvent } from 'react';
+import { Link } from 'react-router-dom';
 import { Icon } from '../components/Icon';
+import { useAuth } from '../state/Auth';
 import { Stat, Switch } from '../components/ui';
 import { useToast } from '../components/Toast';
 import { TESTS_BY_DATE } from '../data/tests';
@@ -29,7 +31,8 @@ function toCsv(trades: Trade[]): string {
 
 export default function Perfil() {
   const toast = useToast();
-  const { state, setPref, setPlanRules, logout, clearDemo, hasDemo } = useAppState();
+  const { state, setPref, setPlanRules, logout, clearDemo, hasDemo, syncStatus } = useAppState();
+  const { mode, role } = useAuth();
   const [newRule, setNewRule] = useState('');
   const sum = summarize(state.trades);
   const states = TESTS_BY_DATE.map((t) => testState(t, state.progress[t.id]));
@@ -90,6 +93,19 @@ export default function Perfil() {
         <Stat label="Tests hechos" value={`${finished}/${TESTS_BY_DATE.length}`} />
         <Stat label="Aciertos" value={answered ? `${Math.round((correct / answered) * 100)}%` : '—'} />
       </div>
+
+      {role === 'mentor' && (
+        <Link to="/mentor" className="card card--link">
+          <span className="install__icon">
+            <Icon name="users" size={20} />
+          </span>
+          <span className="col gap-2">
+            <span className="strong">Panel del mentor</span>
+            <span className="small muted">Autoriza o quita los emails de tus alumnos</span>
+          </span>
+          <Icon name="chevronRight" size={18} className="faint push-right" />
+        </Link>
+      )}
 
       <section className="col gap-8" aria-labelledby="p-notif">
         <h2 id="p-notif" className="group-title">
@@ -172,7 +188,15 @@ export default function Perfil() {
         </div>
       </section>
 
-      <p className="demo-note">Versión de prueba 0.1 · Tus datos se guardan solo en este teléfono.</p>
+      <p className="demo-note" role="status">
+        {mode === 'demo'
+          ? 'Versión de prueba · Tus datos se guardan solo en este teléfono.'
+          : syncStatus === 'synced'
+            ? 'Todo guardado en tu cuenta.'
+            : syncStatus === 'syncing'
+              ? 'Guardando en tu cuenta…'
+              : 'Sin conexión: tus cambios se guardarán en tu cuenta al recuperarla.'}
+      </p>
     </div>
   );
 }

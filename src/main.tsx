@@ -12,16 +12,16 @@ import './styles.css';
 import './state/install';
 import App from './App';
 import { ToastProvider } from './components/Toast';
-import { AppStateProvider } from './state/AppState';
+import { AuthProvider } from './state/Auth';
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
     <HashRouter>
-      <AppStateProvider>
+      <AuthProvider>
         <ToastProvider>
           <App />
         </ToastProvider>
-      </AppStateProvider>
+      </AuthProvider>
     </HashRouter>
   </StrictMode>
 );

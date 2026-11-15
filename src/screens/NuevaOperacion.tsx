@@ -7,11 +7,13 @@ import { ASSETS, MOODS, SETUPS } from '../content';
 import type { Side } from '../data/types';
 import { dateKey, money, pad, parseNumber, points, rMultiple } from '../lib/format';
 import { useAppState } from '../state/AppState';
+import { useAuth } from '../state/Auth';
 
 export default function NuevaOperacion() {
   const nav = useNavigate();
   const toast = useToast();
   const { addTrade } = useAppState();
+  const { mode } = useAuth();
   const now = new Date();
 
   const [asset, setAsset] = useState('NQ');
@@ -191,7 +193,7 @@ export default function NuevaOperacion() {
 
           <p className="small faint row gap-8">
             <Icon name="lock" size={14} />
-            Se guarda en tu teléfono. Podrás añadir capturas cuando conectemos el servidor.
+            {mode === 'demo' ? 'Se guarda en tu teléfono.' : 'Se guarda en tu cuenta; si no hay conexión, se envía al recuperarla.'}
           </p>
         </div>
       </form>

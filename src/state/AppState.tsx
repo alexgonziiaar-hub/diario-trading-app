@@ -1,10 +1,10 @@
-import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from 'react';
+import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { DEFAULT_RULES } from '../content';
 import { DEMO_NOTES, DEMO_PROGRESS, DEMO_SAVED, makeDemoTrades } from '../data/demo';
 import type { Prefs, Profile, Progress, Trade } from '../data/types';
 import { dateKey } from '../lib/format';
 
-const STORAGE_KEY = 'diario-trading:v1';
+export const DEMO_STORAGE_KEY = 'diario-trading:v1';
 
 export interface PersistedState {
   version: 1;
@@ -20,6 +20,21 @@ export interface PersistedState {
   demoLoaded: boolean;
 }
 
+/** Lo que se guarda en la cuenta del alumno (el resto solo afecta a este teléfono) */
+const SYNC_KEYS = ['profile', 'trades', 'progress', 'saved', 'notes', 'planRules', 'planChecks', 'prefs'] as const;
+type SyncedState = Pick<PersistedState, (typeof SYNC_KEYS)[number]>;
+
+const pickSynced = (s: PersistedState): SyncedState =>
+  Object.fromEntries(SYNC_KEYS.map((k) => [k, s[k]])) as SyncedState;
+
+/** Guardado remoto (Supabase). Sin él, los datos se quedan solo en el teléfono. */
+export interface Remote {
+  load: () => Promise<{ data: Partial<SyncedState>; updatedAt: string } | null>;
+  save: (data: SyncedState) => Promise<void>;
+}
+
+export type SyncStatus = 'local' | 'syncing' | 'synced' | 'pending';
+
 const initialState = (): PersistedState => ({
   version: 1,
   profile: null,
@@ -34,14 +49,31 @@ const initialState = (): PersistedState => ({
   demoLoaded: false
 });
 
-function load(): PersistedState {
+function load(key: string): PersistedState {
   try {
-    const raw = localStorage.getItem(STORAGE_KEY);
+    const raw = localStorage.getItem(key);
     if (raw) return { ...initialState(), ...JSON.parse(raw) };
   } catch {
     /* datos dañados o sin acceso: empezamos de cero */
   }
   return initialState();
+}
+
+interface SyncMeta {
+  /** Hay cambios en el teléfono que aún no han llegado al servidor */
+  dirty: boolean;
+  /** Momento del último cambio local (ms) */
+  localAt: number;
+}
+
+function readMeta(key: string): SyncMeta {
+  try {
+    const raw = localStorage.getItem(key);
+    if (raw) return JSON.parse(raw) as SyncMeta;
+  } catch {
+    /* sin datos */
+  }
+  return { dirty: false, localAt: 0 };
 }
 
 interface Actions {
@@ -64,37 +96,121 @@ interface Ctx extends Actions {
   /** Casillas de "Mi plan de hoy" (se reinician cada día) */
   todayChecks: boolean[];
   hasDemo: boolean;
+  syncStatus: SyncStatus;
 }
 
 const AppStateContext = createContext<Ctx | null>(null);
 
-export function AppStateProvider({ children }: { children: ReactNode }) {
-  const [state, setState] = useState<PersistedState>(load);
+interface ProviderProps {
+  children: ReactNode;
+  storageKey?: string;
+  /** Cargar datos de ejemplo al entrar por primera vez (solo en la versión de prueba) */
+  seedDemo?: boolean;
+  remote?: Remote | null;
+  /** Al cerrar sesión (en modo cuentas lo gestiona Auth) */
+  onLogout?: () => void;
+}
+
+export function AppStateProvider({ children, storageKey = DEMO_STORAGE_KEY, seedDemo = true, remote = null, onLogout }: ProviderProps) {
+  const metaKey = `${storageKey}:sync`;
+  const [state, setState] = useState<PersistedState>(() => load(storageKey));
+  const [syncStatus, setSyncStatus] = useState<SyncStatus>(remote ? 'syncing' : 'local');
+  const [syncTick, setSyncTick] = useState(0);
+  const pulled = useRef(false);
+  const lastSynced = useRef<string | null>(null);
 
   useEffect(() => {
     try {
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+      localStorage.setItem(storageKey, JSON.stringify(state));
     } catch {
       /* almacenamiento lleno o bloqueado */
     }
-  }, [state]);
+  }, [state, storageKey]);
 
-  const login = useCallback((profile: Profile) => {
-    setState((s) => {
-      if (s.demoLoaded) return { ...s, profile };
-      return {
-        ...s,
-        profile,
-        demoLoaded: true,
-        trades: [...makeDemoTrades(), ...s.trades],
-        progress: { ...DEMO_PROGRESS, ...s.progress },
-        saved: { ...DEMO_SAVED, ...s.saved },
-        notes: { ...DEMO_NOTES, ...s.notes }
-      };
-    });
-  }, []);
+  /* ---------- sincronización con la cuenta ---------- */
 
-  const logout = useCallback(() => setState((s) => ({ ...s, profile: null })), []);
+  const pull = useCallback(async () => {
+    if (!remote) return;
+    try {
+      const r = await remote.load();
+      const meta = readMeta(metaKey);
+      const localNewer = meta.dirty && r !== null && meta.localAt > Date.parse(r.updatedAt);
+      if (r && !localNewer) {
+        const merged = { ...pickSynced(initialState()), ...r.data } as SyncedState;
+        lastSynced.current = JSON.stringify(merged);
+        setState((s) => ({ ...s, ...merged }));
+        localStorage.setItem(metaKey, JSON.stringify({ dirty: false, localAt: Date.now() }));
+      }
+      pulled.current = true;
+      setSyncTick((t) => t + 1);
+    } catch {
+      setSyncStatus('pending');
+    }
+  }, [remote, metaKey]);
+
+  useEffect(() => {
+    void pull();
+  }, [pull]);
+
+  useEffect(() => {
+    if (!remote) return;
+    const retry = () => (pulled.current ? setSyncTick((t) => t + 1) : void pull());
+    const onVisible = () => document.visibilityState === 'visible' && retry();
+    window.addEventListener('online', retry);
+    document.addEventListener('visibilitychange', onVisible);
+    return () => {
+      window.removeEventListener('online', retry);
+      document.removeEventListener('visibilitychange', onVisible);
+    };
+  }, [remote, pull]);
+
+  useEffect(() => {
+    if (!remote || !pulled.current) return;
+    const payload = pickSynced(state);
+    const json = JSON.stringify(payload);
+    if (json === lastSynced.current) {
+      setSyncStatus('synced');
+      return;
+    }
+    localStorage.setItem(metaKey, JSON.stringify({ dirty: true, localAt: Date.now() }));
+    setSyncStatus('syncing');
+    const timer = window.setTimeout(async () => {
+      try {
+        await remote.save(payload);
+        lastSynced.current = json;
+        localStorage.setItem(metaKey, JSON.stringify({ dirty: false, localAt: Date.now() }));
+        setSyncStatus('synced');
+      } catch {
+        setSyncStatus('pending');
+      }
+    }, 1000);
+    return () => window.clearTimeout(timer);
+  }, [state, remote, syncTick, metaKey]);
+
+  /* ---------- acciones ---------- */
+
+  const login = useCallback(
+    (profile: Profile) => {
+      setState((s) => {
+        if (!seedDemo || s.demoLoaded) return { ...s, profile };
+        return {
+          ...s,
+          profile,
+          demoLoaded: true,
+          trades: [...makeDemoTrades(), ...s.trades],
+          progress: { ...DEMO_PROGRESS, ...s.progress },
+          saved: { ...DEMO_SAVED, ...s.saved },
+          notes: { ...DEMO_NOTES, ...s.notes }
+        };
+      });
+    },
+    [seedDemo]
+  );
+
+  const logout = useCallback(() => {
+    if (onLogout) onLogout();
+    else setState((s) => ({ ...s, profile: null }));
+  }, [onLogout]);
 
   const addTrade = useCallback((trade: Trade) => {
     setState((s) => ({ ...s, trades: [trade, ...s.trades].sort((a, b) => (a.date + a.time < b.date + b.time ? 1 : -1)) }));
@@ -156,6 +272,7 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
     state,
     todayChecks,
     hasDemo,
+    syncStatus,
     login,
     logout,
     addTrade,
