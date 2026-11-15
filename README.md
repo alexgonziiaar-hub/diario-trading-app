@@ -4,6 +4,8 @@ App web instalable (PWA) para que cada alumno lleve su diario de trading y haga 
 
 Se instala desde el navegador del móvil («Añadir a pantalla de inicio») y funciona sin conexión.
 
+**App publicada:** https://alexgonziiaar-hub.github.io/diario-trading-app/
+
 ## Qué incluye esta versión (0.1)
 
 - **Acceso** con nombre, email y código de alumno.
