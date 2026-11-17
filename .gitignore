@@ -5,3 +5,6 @@ dev-dist
 .DS_Store
 dist-pages
 dist-accounts
+
+# Copias de trabajo temporales de Claude
+.claude/worktrees/
